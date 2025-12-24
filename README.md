@@ -100,10 +100,12 @@ flutter run
 ```
 ## Gallery
 
-### Web Dashboard & Analytics
+### System Architecture
+<img width="512" height="279" alt="image" src="https://github.com/user-attachments/assets/e0d3cd3f-bd60-44b0-9680-d14ce7b7e90f" />
+
+### Web Dashboard & Analytics / Mobile Application
 <img width="1280" height="339" alt="image" src="https://github.com/user-attachments/assets/dfb36a6f-1dc5-477b-938d-6c38dd613547" />
 
-### Mobile Application
 ---
 
 ## Future Improvements
