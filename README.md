@@ -101,6 +101,8 @@ flutter run
 ## Gallery
 
 ### Web Dashboard & Analytics
+<img width="1280" height="339" alt="image" src="https://github.com/user-attachments/assets/dfb36a6f-1dc5-477b-938d-6c38dd613547" />
+
 ### Mobile Application
 ---
 
