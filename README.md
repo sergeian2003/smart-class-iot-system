@@ -104,7 +104,7 @@ flutter run
 ### Mobile Application
 ---
 
-## 🔮 Future Improvements
+## Future Improvements
 
 - [ ] Implement Machine Learning model for energy usage prediction.
 - [ ] Add MQTT support for lower latency.
