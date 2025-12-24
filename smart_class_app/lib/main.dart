@@ -4,10 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 // --- CONFIGURATION ---
-// 1. For Android Emulator: use "10.0.2.2" (Host loopback)
-// 2. For Real Device: use your PC's local IP (e.g., "192.168.1.35")
-const String SERVER_IP = "10.0.2.2"; 
-const String API_URL = "http://$SERVER_IP:5000/api/latest";
+const String serverIp = "10.0.2.2"; // Or your PC IP
+const String baseUrl = "http://$serverIp:5000";
 
 void main() {
   runApp(const MyApp());
@@ -15,17 +13,12 @@ void main() {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Smart Class',
-      theme: ThemeData(
-        primarySwatch: Colors.indigo,
-        useMaterial3: true,
-        scaffoldBackgroundColor: Colors.grey[100],
-      ),
+      title: 'Smart School',
+      theme: ThemeData(primarySwatch: Colors.indigo, useMaterial3: true),
       home: const DashboardScreen(),
     );
   }
@@ -33,26 +26,19 @@ class MyApp extends StatelessWidget {
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
-
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // Default UI state
-  String temperature = "--";
-  String light = "--";
-  bool isMotionDetected = false;
-  String lastUpdated = "Waiting...";
-  bool isLoading = true;
+  List<dynamic> classrooms = [];
   Timer? timer;
 
   @override
   void initState() {
     super.initState();
     fetchData();
-    // Auto-refresh data every 2 seconds
-    timer = Timer.periodic(const Duration(seconds: 2), (Timer t) => fetchData());
+    timer = Timer.periodic(const Duration(seconds: 2), (t) => fetchData());
   }
 
   @override
@@ -61,168 +47,133 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  /// Fetches the latest sensor data from the Flask API
   Future<void> fetchData() async {
     try {
-      final response = await http.get(Uri.parse(API_URL));
-
+      final response = await http.get(Uri.parse("$baseUrl/api/status"));
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        
-        if (data.isNotEmpty) {
-          // The server returns a list of rows from SQLite.
-          // Schema: [id, classroom_id, temp, light, motion, timestamp]
-          // Indexes: 2=temp, 3=light, 4=motion, 5=time
-          
-          final latestRecord = data[0]; // Get the most recent record
-
-          setState(() {
-            temperature = latestRecord[2].toString();
-            light = latestRecord[3].toString();
-            // 1 = Motion Detected, 0 = No Motion
-            isMotionDetected = (latestRecord[4] == 1);
-            
-            // Parse and format timestamp (extracting time only)
-            String rawTime = latestRecord[5].toString();
-            // Simple string slicing to get HH:MM:SS
-            lastUpdated = rawTime.length > 10 ? rawTime.substring(11, 19) : rawTime;
-            
-            isLoading = false;
-          });
-        }
-      } else {
-        print("Server returned error: ${response.statusCode}");
+        setState(() {
+          classrooms = json.decode(response.body);
+        });
       }
     } catch (e) {
-      print("Error fetching data: $e");
+      debugPrint("Error: $e");
+    }
+  }
+
+  Future<void> sendControl(String id, String action) async {
+    try {
+      await http.post(
+        Uri.parse("$baseUrl/api/control"),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({"classroom_id": id, "action": action}),
+      );
+      fetchData(); // Refresh UI immediately
+    } catch (e) {
+      debugPrint("Error sending control: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Smart Class Monitor', style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.indigo,
-        centerTitle: true,
-      ),
-      body: isLoading
+      appBar: AppBar(title: const Text("Smart School Control"), centerTitle: true),
+      body: classrooms.isEmpty
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    "Real-time Sensor Data",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    "Last updated: $lastUpdated",
-                    style: TextStyle(color: Colors.grey[600]),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Temperature Card
-                  SensorCard(
-                    title: "Temperature",
-                    value: "$temperature °C",
-                    icon: Icons.thermostat,
-                    color: Colors.orange,
-                  ),
-                  
-                  // Light Level Card
-                  SensorCard(
-                    title: "Light Level",
-                    value: "$light Lux",
-                    icon: Icons.wb_sunny,
-                    color: Colors.green,
-                  ),
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: classrooms.length,
+              itemBuilder: (context, index) {
+                final room = classrooms[index];
+                final isAuto = room['mode'] == 'AUTO';
+                final isLightOn = room['light_status'] == 'ON';
 
-                  // Motion Status Card
-                  SensorCard(
-                    title: "Motion Status",
-                    value: isMotionDetected ? "DETECTED" : "Safe",
-                    icon: isMotionDetected ? Icons.run_circle : Icons.accessibility_new,
-                    color: isMotionDetected ? Colors.red : Colors.blue,
-                  ),
-                  
-                  const Spacer(),
-                  
-                  // Manual Refresh Button
-                  ElevatedButton.icon(
-                    onPressed: fetchData,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text("Refresh Now"),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 15),
+                return Card(
+                  elevation: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      children: [
+                        // Header
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(room['classroom_id'], style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: isAuto ? Colors.blue[100] : Colors.grey[200],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(isAuto ? "AUTO (AI)" : "MANUAL", 
+                                  style: TextStyle(color: isAuto ? Colors.blue[800] : Colors.black54, fontSize: 12)),
+                            )
+                          ],
+                        ),
+                        const Divider(),
+                        // Data Row
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _dataColumn(Icons.thermostat, "${room['last_temp']}°C", "Temp"),
+                            _dataColumn(Icons.wb_sunny, "${room['last_lux']} Lx", "Light"),
+                            _dataColumn(Icons.directions_run, room['last_motion'] == 1 ? "Yes" : "No", "Motion"),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        // Control Buttons
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () => sendControl(room['classroom_id'], 'ON'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: (!isAuto && isLightOn) ? Colors.green : Colors.green[50],
+                                  foregroundColor: (!isAuto && isLightOn) ? Colors.white : Colors.green,
+                                ),
+                                child: const Text("LIGHT ON"),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () => sendControl(room['classroom_id'], 'OFF'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: (!isAuto && !isLightOn) ? Colors.red : Colors.red[50],
+                                  foregroundColor: (!isAuto && !isLightOn) ? Colors.white : Colors.red,
+                                ),
+                                child: const Text("LIGHT OFF"),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => sendControl(room['classroom_id'], 'AUTO'),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text("RESET TO AUTO MODE"),
+                          ),
+                        )
+                      ],
                     ),
-                  )
-                ],
-              ),
+                  ),
+                );
+              },
             ),
     );
   }
-}
 
-/// Reusable Widget for displaying sensor data cards
-class SensorCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const SensorCard({
-    super.key,
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      margin: const EdgeInsets.symmetric(vertical: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Row(
-          children: [
-            // Icon Container
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 30),
-            ),
-            const SizedBox(width: 20),
-            // Text Information
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+  Widget _dataColumn(IconData icon, String val, String label) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.grey, size: 20),
+        const SizedBox(height: 5),
+        Text(val, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      ],
     );
   }
 }
