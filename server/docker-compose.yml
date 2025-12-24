@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  # 1. Main Server (Flask + Web Dashboard)
+  backend:
+    build: .
+    container_name: smart_class_backend
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+    command: python app.py
+
+  # 2. Analytics App (Streamlit App)
+  analytics_app:
+    build: .
+    container_name: smart_class_analytics
+    restart: always
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data  # Reads the same database!
+    # Run Streamlit instead of Flask
+    command: streamlit run dashboard_app.py --server.port 8501 --server.address 0.0.0.0
